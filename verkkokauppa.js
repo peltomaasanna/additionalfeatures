@@ -37,17 +37,26 @@ const conf = {
 
 /**
  * Gets the products
+ * Optional product id query parameter for filtering only certain product id
+ * Optional product name query parameter for filtering only certain product name
  * Optional category query parameter for filtering only products from that category
  */
 app.get('/products', async (req, res) => {
     try {
         const connection = await mysql.createConnection(conf);
 
+        const id = req.query.id;
+        
+        const productname = req.query.productname;
+
         const category = req.query.category;
 
         let result;        
-
-        if(category){
+        if(id){
+            result = await connection.execute("SELECT id, product_name productName, price, image_url imageUrl, category  FROM product WHERE id=?", [id]);
+        }else if(productname){
+            result = await connection.execute("SELECT id, product_name productName, price, image_url imageUrl, category  FROM product WHERE product_name=?", [productname]);
+        }else if(category){
             result = await connection.execute("SELECT id, product_name productName, price, image_url imageUrl, category  FROM product WHERE category=?", [category]);
         }else{
             result = await connection.execute("SELECT id, product_name productName, price, image_url imageUrl, category  FROM product");
@@ -64,13 +73,16 @@ app.get('/products', async (req, res) => {
 
 /**
  * Gets all the categories
+ * Optional category query parameter for filtering only certain product category by name
  */
 app.get('/categories', async (req, res) => {
 
     try {
         const connection = await mysql.createConnection(conf);
 
-        const [rows] = await connection.execute("SELECT category_name categoryName, category_description description FROM product_category");
+        const categoryname = req.query.categoryname;
+
+        const [rows] = await connection.execute("SELECT category_name categoryName, category_description description FROM product_category WHERE category_name=?", [categoryname]);
 
         res.json(rows);
 
@@ -146,7 +158,40 @@ app.post('/products', async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+/**
+ * Update product price of the given product
+ */
+app.post('/products/priceupdate', async (req, res) => {
 
+    const connection = await mysql.createConnection(conf);
+
+    try {
+        connection.beginTransaction();
+
+        const {id, price} = req.body;
+        
+        if (!id || !price) {
+            await connection.rollback();
+            return res.status(400).json({ error: 'Price and id are both required for request' });
+        }
+
+        await connection.execute('UPDATE product SET price=? WHERE id=?', [price, id]);
+        
+        // Commit the transaction
+        await connection.commit();
+        console.log('tietokanta päivitetty');
+
+        res.status(200).json({message: 'Price updated succesfully for product id ' + id});
+
+    } catch (err) {
+        console.error(err);
+        
+        // Roll back the transaction in case of an error
+        await connection.rollback();
+
+        res.status(500).json({ error: err.message });
+    }
+});
 
 /**
  * Place an order. 
