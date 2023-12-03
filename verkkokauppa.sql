@@ -42,6 +42,8 @@ CREATE TABLE order_line(
     FOREIGN KEY (product_id) REFERENCES product(id)
 );
 
+ALTER TABLE product
+ADD COLUMN amount INT DEFAULT NULL;
 
 INSERT INTO product_category VALUES ('Computers', 'Laptop and desktop computers'),
 ('Sports', 'Sport equipment'),('Bikes', 'City and MTB bikes'),('Music', 'Guitars, drums and other instruments'), ('Phones', 'Mobile devices for all uses');

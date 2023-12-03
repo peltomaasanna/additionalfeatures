@@ -159,7 +159,7 @@ app.post('/products', async (req, res) => {
     }
 });
 /**
- * Update product price of the given product
+ * Update product price of the given product. Product id and price needs to be given.
  */
 app.post('/products/priceupdate', async (req, res) => {
 
@@ -169,7 +169,8 @@ app.post('/products/priceupdate', async (req, res) => {
         connection.beginTransaction();
 
         const {id, price} = req.body;
-        
+
+        // Check that both id and price are given
         if (!id || !price) {
             await connection.rollback();
             return res.status(400).json({ error: 'Price and id are both required for request' });
@@ -328,3 +329,58 @@ async function getOrders(username){
         res.status(500).json({ error: err.message });
     }
 }
+
+// GET stockbalance gives the value of stock in response. The query can be done for whole stock or for one product id.This gives as response
+// the id, tuotenimi, määrä, If the query is done for total, 
+// the query is: http://localhost:3001/stockbalance?total=true
+app.get('/stockbalance', async (req, res) => {
+    try {
+        const connection = await mysql.createConnection(conf);
+
+        const id = req.query.id;
+        const total = req.query.total;
+
+        if (total && total.toLowerCase() === 'true') {
+            const grandTotalResult = await connection.execute("SELECT SUM(amount * price) as grand_total FROM product");
+
+            res.json(grandTotalResult[0][0]); // Respond with the grand total value of all items in the stock
+            return;
+        }
+
+        let result;        
+        if(id){
+            result = await connection.execute("SELECT id, product_name productName, amount, price, amount * price as stock_balance FROM product WHERE id=?", [id]);
+        }else{
+            result = await connection.execute("SELECT id, product_name productName, amount, price, amount * price as stock_balance FROM product");
+        }
+        
+        //First index in the result contains the rows in an array
+        res.json(result[0]);
+
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Get all the products that have not enough items in stock for fulfilling the orders that are in for them. The response is giving the product,
+//product name, price, amount in stock and total amount of orders
+app.get('/lowstockproducts', async (req, res) => {
+    try {
+        const connection = await mysql.createConnection(conf);
+
+        const result = await connection.execute(`
+            SELECT p.id, p.product_name, p.price, p.amount, COALESCE(SUM(ol.quantity), 0) as total_ordered 
+            FROM product p
+            LEFT JOIN order_line ol ON p.id = ol.product_id
+            LEFT JOIN customer_order co ON ol.order_id = co.id
+            GROUP BY p.id, p.product_name, p.price, p.amount
+            HAVING p.amount - total_ordered < 0
+        `);
+
+        // First index in the result contains the rows in an array
+        res.json(result[0]);
+
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
